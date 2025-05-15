@@ -1,24 +1,18 @@
 # anatolianatlas
-
-## Project setup
+## Verify the Npm and Node installation
+```
+node -v
+npm -v
+```
+## Download dependencies (will install all depedencies in package.json)
 ```
 npm install
 ```
 
-### Compiles and hot-reloads for development
+## Start the local server
 ```
 npm run serve
 ```
 
-### Compiles and minifies for production
-```
-npm run build
-```
 
-### Lints and fixes files
-```
-npm run lint
-```
 
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
