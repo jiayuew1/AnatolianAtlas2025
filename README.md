@@ -1,4 +1,4 @@
-# anatolianatlas
+# AnatolianAtlas
 ## Verify the Npm and Node installation
 ```
 node -v

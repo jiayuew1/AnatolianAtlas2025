@@ -125,8 +125,10 @@ export default {
         ).bindPopup(`
           <div class="popup-content">
             <h3>${point['Name']}</h3>
+            <p><strong>Anatolian Atlas ID:</strong> ${point['AA_ID']}</p>
             <p><strong>Survey:</strong> ${point.Survey}</p>
             <p><strong>Periods:</strong> ${point.News ? point.News.split(',').join(', ') : ''}</p>
+            <p><strong>Coordinate:</strong> ${point.Coordinate}</p>
           </div>
         `, {
           maxWidth: 300,

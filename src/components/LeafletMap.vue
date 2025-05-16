@@ -5,6 +5,7 @@
       <cluster-map
         :points="filteredPoints"
         :get-color="getSurveyColor"
+        ref="clusterMap"
       />
       <!-- Legend inside map -->
       <div class="legend-control">
@@ -13,10 +14,11 @@
         <span class="spacer"></span>
         <span class="toggle-icon">{{ isLegendCollapsed ? '+' : '-' }}</span>
       </h3>
-        <div class="legend-items" v-show="!isLegendCollapsed">
-          <div v-for="(color, survey) in surveyColors" :key="survey" class="legend-item">
-            <span class="color-dot" :style="{ backgroundColor: color }"></span>
-            <span class="survey-name">{{ formatDisplayName(survey) }}</span>
+      <div class="legend-items" v-show="!isLegendCollapsed">
+          <!-- Use the legendItems array to control what appears in the legend -->
+          <div v-for="groupName in legendItems" :key="groupName" class="legend-item">
+            <span class="color-dot" :style="{ backgroundColor: surveyColors[groupName] }"></span>
+            <span class="survey-name">{{ groupName }}</span>
           </div>
         </div>
       </div>
@@ -34,6 +36,19 @@
           @updatePeriod="handlePeriodChange"
         />
       </div>
+    <!-- Search Bar -->
+    <div class="search-section">
+      <h3>Search Sites {{ isPeriodFilterActive ? '(within selected periods)' : '' }}</h3>
+      <SearchBar
+        :points="points" 
+        :filteredByPeriod="periodFilteredPoints"
+        :isPeriodFilterActive="isPeriodFilterActive"
+        @site-selected="handleSiteSelected"
+        @site-removed="handleSiteRemoved"
+        @search-cleared="handleSearchCleared"
+      />
+    </div>
+
       <div class="clear-button-container">
         <button class="clear-button" @click="clearSelections">
           Clear Selections
@@ -51,12 +66,15 @@ import Papa from 'papaparse'
 import PeriodTree from './PeriodTree.vue'
 import ClusterMap from './MarkerCluster.vue'
 import * as XLSX from 'xlsx'
+import SearchBar from './SearchBar.vue'
+import { toRaw } from 'vue'
 
 export default {
   name: 'LeafletMap',
   components: {
     PeriodTree,
-    ClusterMap
+    ClusterMap,
+    SearchBar
   },
   data() {
     return {
@@ -67,7 +85,9 @@ export default {
       selectedPeriods: {},
       expandedPeriods: {},
       surveyColors: {},
+      legendItems: [],
       filterCache: new Map(),
+      selectedSites: new Set(),
       periods: {
         "Paleolithic": {
           "LowerPaleolithic": {},
@@ -159,31 +179,63 @@ export default {
     }
   },
   computed: {
-    filteredPoints() {
+    // Check if any period filters are active
+    isPeriodFilterActive() {
+      return Object.values(this.selectedPeriods).some(isSelected => isSelected);
+    },
+    
+    // Get points filtered by period only (for search bar)
+    periodFilteredPoints() {
+      if (!this.isPeriodFilterActive) {
+        return this.points;
+      }
+      
       const selectedPeriodNames = Object.entries(this.selectedPeriods)
         .filter(([, isSelected]) => isSelected)
         .map(([period]) => period);
-
+      
       if (selectedPeriodNames.length === 0) {
         return this.points;
       }
-
+      
       const cacheKey = selectedPeriodNames.sort().join('|');
       
       if (this.filterCache.has(cacheKey)) {
         return this.filterCache.get(cacheKey);
+      } else {
+        const filtered = this.points.filter(point => {
+          // Check for period data in multiple possible fields
+          const periodsField = point.News || point.attestations4Filter || point.attestations;
+          if (!periodsField) return false;
+          
+          const pointPeriods = periodsField.split(',').map(p => p.trim());
+          return selectedPeriodNames.some(period => pointPeriods.includes(period));
+        });
+        
+        this.filterCache.set(cacheKey, filtered);
+        return filtered;
       }
-
-      const filtered = this.points.filter(point => {
-        if (!point.News) return false;
-        const pointPeriods = point.News.split(',').map(p => p.trim());
-        return selectedPeriodNames.some(period => pointPeriods.includes(period));
-      });
-
-      this.filterCache.set(cacheKey, filtered);
-      return filtered;
+    },
+    filteredPoints() {
+      // If there are selected sites from search, ONLY show those sites
+      if (this.selectedSites.size > 0) {
+        console.log('Showing only selected sites:', Array.from(this.selectedSites));
+        return this.points.filter(point => {
+          const pointId = point.AA_ID || point.OBJECTID;
+          return this.selectedSites.has(pointId);
+        });
+      }
+      
+      // If no specific sites selected but period filtering is active
+      if (this.isPeriodFilterActive) {
+        return this.periodFilteredPoints;
+      }
+      
+      // If no filters are active, show all points
+      return this.points;
     }
   },
+    
   methods: {
     toggleLegend() {
       this.isLegendCollapsed = !this.isLegendCollapsed; // Toggle the collapsed state
@@ -203,8 +255,92 @@ export default {
       Object.keys(this.selectedPeriods).forEach(period => {
         this.selectedPeriods[period] = false;
       });
+      this.selectedSites.clear();
+    },
+    
+    // Handle site selection from search
+    handleSiteSelected(site) {
+      const siteId = site.AA_ID || site.OBJECTID;
+      
+      // Always add the site to selectedSites - this will override period filters
+      this.selectedSites.add(siteId);
+      
+      // Zoom to the selected site without animation
+      setTimeout(() => {
+        // Get map instance from cluster-map component
+        const clusterMap = this.$refs.clusterMap;
+        if (clusterMap && clusterMap.map) {
+          // Use toRaw to unwrap the Leaflet map object from Vue's reactivity system
+          const rawMap = toRaw(clusterMap.map);
+          
+          // Convert coordinates to numbers
+          const lat = parseFloat(site.y);
+          const lng = parseFloat(site.x);
+          
+          if (!isNaN(lat) && !isNaN(lng)) {
+            // Use the raw map object
+            rawMap.invalidateSize();
+            rawMap.setView([lat, lng], 10, {
+              animate: false  // Turn off animation to be safe
+            });
+            }
+          }
+      }, 300);
+    },
+    // Handle site removal (new method)
+    handleSiteRemoved(siteId) {
+      this.selectedSites.delete(siteId);
+    },
+    
+    // Handle search cleared
+    handleSearchCleared() {
+      this.selectedSites.clear();
     },
     getSurveyColor(survey) {
+      // Handle specific survey types
+      if (survey.startsWith('Maner_') || survey === 'Maner') {
+        return this.surveyColors['Maner'] || '#999999';
+      }
+      
+      if (survey.startsWith('Omura Konya')) {
+        return this.surveyColors['Omura Konya'] || '#999999';
+      }
+      
+      if (survey.startsWith('Omura_') || survey.startsWith('Omura ') || survey === 'Omura') {
+        return this.surveyColors['Omura'] || '#999999';
+      }
+      
+      if (survey.startsWith('Bahar_') || survey === 'Bahar') {
+        return this.surveyColors['Bahar'] || '#999999';
+      }
+      
+      // Handle surveys with underscores or spaces
+      const parts = survey.includes('_') ? 
+        survey.split('_') : 
+        survey.split(' ');
+        
+      const firstPart = parts[0];
+      const secondPart = parts[1];
+      
+      // Check if the second part is a year or contains numbers
+      if (parts.length > 1 && (
+          !isNaN(secondPart) || // Is a number
+          /\d/.test(secondPart) || // Contains digits
+          secondPart?.match(/^\d{4}$/) || // Is a year
+          secondPart?.includes('-') // Contains a dash (date range)
+      )) {
+        // Use first part for color lookup
+        return this.surveyColors[firstPart] || '#999999';
+      }
+      
+      // Try to extract the author name for surveys with parentheses
+      const parenMatch = survey.match(/(.*?)\s*\([^)]+\)/);
+      if (parenMatch) {
+        const baseName = parenMatch[1].trim();
+        return this.surveyColors[baseName] || '#999999';
+      }
+      
+      // Default: use full survey name
       return this.surveyColors[survey] || '#999999';
     },
     togglePeriod(period) {
@@ -226,6 +362,7 @@ export default {
         updateSubPeriods(this.periods[period], checked);
       }
     },
+
     
     downloadSelections() {
       try {
@@ -280,7 +417,7 @@ export default {
     try {
       this.dataStatus = 'Loading CSV...';
       
-      const response = await fetch('/all_surveys_Oct2024_points_0.csv');
+      const response = await fetch('/AnatolianAtlas_05152025.csv');
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -317,26 +454,104 @@ export default {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
-          // 检查解析结果
+          // Check for Turkish letters
           console.log('Sample of parsed data:', results.data.slice(0, 2));
-          
+
           this.points = results.data.filter(row => {
-            const hasCoordinates = row.x && row.y;
-            const validCoordinates = !isNaN(parseFloat(row.x)) && !isNaN(parseFloat(row.y));
-            return hasCoordinates && validCoordinates;
+            // Handle both the old and new column names for coordinates
+            const xCoord = row.x || row.X;
+            const yCoord = row.y || row.Y;
+
+            const hasCoordinates = xCoord && yCoord;
+            const validCoordinates = !isNaN(parseFloat(xCoord)) && !isNaN(parseFloat(yCoord));
+
+            // Make sure coordinates are accessible in the expected properties
+            if (hasCoordinates && validCoordinates) {
+              // Ensure the point has the x and y properties used elsewhere in the code
+              row.x = xCoord;
+              row.y = yCoord;
+              return true;
+            }
+            return false;
+          });
+
+        // Group survey names by their first part
+          const groupedSurveys = {};
+          this.legendItems = []; // Array to store legend items
+          
+          // Helper function to find the survey group name
+          const getSurveyGroup = (survey) => {
+            // Handle specific survey types
+            if (survey.startsWith('Maner_') || survey === 'Maner') {
+              return 'Maner';
+            }
+            
+            if (survey.startsWith('Omura Konya')) {
+              return 'Omura Konya';
+            }
+            
+            if (survey.startsWith('Omura_') || survey.startsWith('Omura ') || survey === 'Omura') {
+              return 'Omura';
+            }
+            
+            if (survey.startsWith('Bahar_') || survey === 'Bahar') {
+              return 'Bahar';
+            }
+            
+            // Handle surveys with underscores or spaces
+            const parts = survey.includes('_') ? 
+              survey.split('_') : 
+              survey.split(' ');
+            
+            const firstPart = parts[0];
+            const secondPart = parts[1];
+            
+            // Check if the second part is a year or contains numbers
+            if (parts.length > 1 && (
+                !isNaN(secondPart) || // Is a number
+                /\d/.test(secondPart) || // Contains digits
+                secondPart?.match(/^\d{4}$/) || // Is a year
+                secondPart?.includes('-') // Contains a dash (date range)
+            )) {
+              return firstPart;
+            }
+            
+            // Try to extract the author name for surveys with parentheses
+            const parenMatch = survey.match(/(.*?)\s*\([^)]+\)/);
+            if (parenMatch) {
+              return parenMatch[1].trim();
+            }
+            
+            // Default: use full survey name
+            return survey;
+          };
+          
+          // Process all surveys
+          this.points.forEach(point => {
+            const survey = point.Survey || '';
+            if (!survey) return;
+            
+            // Get the group name for this survey
+            const groupName = getSurveyGroup(survey);
+            
+            if (!groupedSurveys[groupName]) {
+              groupedSurveys[groupName] = [];
+              this.legendItems.push(groupName);
+            }
+            
+            groupedSurveys[groupName].push(survey);
           });
           
-          const uniqueSurveys = [...new Set(this.points.map(p => p.Survey))];
-          uniqueSurveys.forEach((survey, index) => {
-            this.surveyColors[survey] = this.colors[index % this.colors.length];
+          // Assign colors to each group
+          this.legendItems.forEach((groupName, index) => {
+            this.surveyColors[groupName] = this.colors[index % this.colors.length];
           });
 
           this.dataStatus = `Parsed ${this.points.length} points`;
-          
           if (this.points.length > 0) {
             //check for Turkish letters
-            const turkishChars = this.points.some(p => 
-              Object.values(p).some(v => 
+            const turkishChars = this.points.some(p =>
+              Object.values(p).some(v =>
                 String(v).match(/[çğıöşüÇĞİÖŞÜ]/)
               )
             );
