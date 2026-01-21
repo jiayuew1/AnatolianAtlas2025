@@ -417,7 +417,7 @@ export default {
     try {
       this.dataStatus = 'Loading CSV...';
       
-      const response = await fetch('/AnatolianAtlas_05152025.csv');
+      const response = await fetch('/AnatolianAtlas_01212026.csv');
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
