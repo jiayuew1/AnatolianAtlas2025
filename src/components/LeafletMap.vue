@@ -174,7 +174,8 @@ export default {
         '#498591',    // Teal
         '#B15DAA',    // Magenta
         '#687A3D',    // Moss green
-        '#8B6C8F'     // Mauve
+        '#8B6C8F',    // Mauve
+        '#FFFFFF'     // White
       ]
     }
   },
