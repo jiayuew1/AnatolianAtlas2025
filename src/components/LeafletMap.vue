@@ -365,38 +365,67 @@ export default {
     },
 
     
-    downloadSelections() {
-      try {
-        // Create a new workbook
-        const wb = XLSX.utils.book_new();
+  downloadSelections() {
+    const pointsToDownload = this.filteredPoints;
+    
+    if (pointsToDownload.length === 0) {
+      alert('No points to download');
+      return;
+    }
+    
+    // Check if selection contains MIGMAG data
+    const hasMIGMAG = pointsToDownload.some(p => p.Survey === 'MIGMAG 2025');
+    
+    const downloadData = pointsToDownload.map(point => {
+      const row = {
+        // === BASIC INFO (ALL SURVEYS) ===
+        'OBJECTID': point.OBJECTID || '',
+        'Name': point.Name || '',
+        'Survey': point.Survey || '',
+        'X': point.X || '',
+        'Y': point.Y || '',
+        'Coordinate': point.Coordinate || '',
         
-        // Select and rename columns for the filtered points
-        const selectedColumns = this.filteredPoints.map(point => ({
-          OBJECTID: point.OBJECTID,
-          'Survey Name': point['Survey'],
-          'Site Name': point['Name'],
-          'Alternative Names': point.AlternativeNames,
-          'Occupational Periods': point.point.attestations4Filter,
-          x: point.x,
-          y: point.y
-        }));
+        // === PERIODS (ALL SURVEYS) ===
+        'Processed_Periods': point.attestations4Filter || '',
         
-        // Convert to sheet with selected columns
-        const ws = XLSX.utils.json_to_sheet(selectedColumns);
-        
-        // Append sheet to workbook
-        XLSX.utils.book_append_sheet(wb, ws, "Selected Surveys");
-        
-        // Create file name with timestamp
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const fileName = `selected_surveys_${timestamp}.xlsx`;
+        // === BIBLIOGRAPHY (ALL SURVEYS) ===
+        'Bibliography': point.Bibliography || ''
+      };
       
-        // Save the document 
-        XLSX.writeFile(wb, fileName);
-      } catch (error) {
-        console.error('Error downloading Excel file:', error);
+      // === MIGMAG-SPECIFIC FIELDS (only if data exists) ===
+      if (point.Survey === 'MIGMAG 2025' || point.nodegoat_ID || point.Pleiades_Link) {
+        row['nodegoat_ID'] = point.nodegoat_ID || '';
+        row['Pleiades_Link'] = point.Pleiades_Link || '';
+        row['DAI_Gazetteer_Link'] = point.DAI_Gazetteer_Link || '';
+        row['ToposText_Link'] = point.ToposText_Link || '';
+        row['Original_Periods'] = point.Original_Periods || '';
+        row['Publications'] = point.Publications || '';
       }
-    },
+      
+      return row;
+    });
+    
+    // Convert to CSV
+    const csv = Papa.unparse(downloadData);
+    
+    // Create download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    const timestamp = new Date().toISOString().split('T')[0];
+    const surveyInfo = hasMIGMAG ? 'with_MIGMAG' : 'Bahar_only';
+    const filename = `anatolian_atlas_${timestamp}_${pointsToDownload.length}sites_${surveyInfo}.csv`;
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 
     created() {
     // Initialize selectedPeriods and expandedPeriods
