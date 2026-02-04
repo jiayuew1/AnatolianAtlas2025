@@ -205,7 +205,7 @@ export default {
       } else {
         const filtered = this.points.filter(point => {
           // Check for period data in multiple possible fields
-          const periodsField = point.News || point.attestations4Filter || point.attestations;
+          const periodsField = point.attestations4Filter || point.attestations;
           if (!periodsField) return false;
           
           const pointPeriods = periodsField.split(',').map(p => p.trim());
@@ -375,7 +375,7 @@ export default {
           'Survey Name': point['Survey'],
           'Site Name': point['Name'],
           'Alternative Names': point.AlternativeNames,
-          'Occupational Periods': point.News,
+          'Occupational Periods': point.point.attestations4Filter,
           x: point.x,
           y: point.y
         }));
