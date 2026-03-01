@@ -65,7 +65,7 @@
 import Papa from 'papaparse'
 import PeriodTree from './PeriodTree.vue'
 import ClusterMap from './MarkerCluster.vue'
-import * as XLSX from 'xlsx'
+
 import SearchBar from './SearchBar.vue'
 import { toRaw } from 'vue'
 
@@ -410,7 +410,7 @@ export default {
     const csv = Papa.unparse(downloadData);
     
     // Create download
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     
@@ -427,7 +427,9 @@ export default {
     document.body.removeChild(link);
   }
 
-    created() {
+  },
+
+  created() {
     // Initialize selectedPeriods and expandedPeriods
     const initializePeriods = (periodsObj) => {
       for (const [key, value] of Object.entries(periodsObj)) {
@@ -440,8 +442,6 @@ export default {
     };
     
     initializePeriods(this.periods);
-  },
-
   },
   async mounted() {
     try {
