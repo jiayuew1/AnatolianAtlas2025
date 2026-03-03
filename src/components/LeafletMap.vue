@@ -87,7 +87,7 @@ export default {
       surveyColors: {},
       legendItems: [],
       filterCache: new Map(),
-      selectedSites: new Set(),
+      selectedSites: [],
       periods: {
         "Paleolithic": {
           "LowerPaleolithic": {},
@@ -219,11 +219,11 @@ export default {
     },
     filteredPoints() {
       // If there are selected sites from search, ONLY show those sites
-      if (this.selectedSites.size > 0) {
-        console.log('Showing only selected sites:', Array.from(this.selectedSites));
+      if (this.selectedSites.length > 0) {
+        console.log('Showing only selected sites:', this.selectedSites);
         return this.points.filter(point => {
           const pointId = point.AA_ID || point.OBJECTID;
-          return this.selectedSites.has(pointId);
+          return this.selectedSites.includes(pointId);
         });
       }
       
@@ -256,7 +256,7 @@ export default {
       Object.keys(this.selectedPeriods).forEach(period => {
         this.selectedPeriods[period] = false;
       });
-      this.selectedSites.clear();
+      this.selectedSites = [];
     },
     
     // Handle site selection from search
@@ -264,7 +264,9 @@ export default {
       const siteId = site.AA_ID || site.OBJECTID;
       
       // Always add the site to selectedSites - this will override period filters
-      this.selectedSites.add(siteId);
+      if (!this.selectedSites.includes(siteId)) {
+        this.selectedSites.push(siteId);
+      }
       
       // Zoom to the selected site without animation
       setTimeout(() => {
@@ -290,12 +292,12 @@ export default {
     },
     // Handle site removal (new method)
     handleSiteRemoved(siteId) {
-      this.selectedSites.delete(siteId);
+      this.selectedSites = this.selectedSites.filter(id => id !== siteId);
     },
     
     // Handle search cleared
     handleSearchCleared() {
-      this.selectedSites.clear();
+      this.selectedSites = [];
     },
     getSurveyColor(survey) {
       // Handle specific survey types
